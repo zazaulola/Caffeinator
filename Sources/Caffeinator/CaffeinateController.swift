@@ -5,6 +5,10 @@ final class CaffeinateController {
     private(set) var endDate: Date?
 
     var onStateChange: (() -> Void)?
+    /// Called on the main queue if launching caffeinate fails.
+    var onError: ((Error) -> Void)?
+
+    private static let pidDefaultsKey = "caffeinatePID"
 
     var isActive: Bool {
         process?.isRunning ?? false
@@ -42,6 +46,7 @@ final class CaffeinateController {
                 if self.process === proc {
                     self.process = nil
                     self.endDate = nil
+                    Self.clearStoredPID()
                     self.onStateChange?()
                 }
             }
@@ -50,10 +55,15 @@ final class CaffeinateController {
         do {
             try p.run()
             process = p
+            Self.storePID(p.processIdentifier)
         } catch {
             process = nil
             endDate = nil
+            Self.clearStoredPID()
             NSLog("Caffeinator: failed to start caffeinate: \(error)")
+            onStateChange?()
+            onError?(error)
+            return
         }
         onStateChange?()
     }
@@ -69,11 +79,48 @@ final class CaffeinateController {
             return
         }
         p.terminationHandler = nil
-        if p.isRunning {
-            p.terminate()
-            p.waitUntilExit()
-        }
         process = nil
         endDate = nil
+        Self.clearStoredPID()
+        guard p.isRunning else { return }
+        // Send SIGTERM synchronously (an instant kill() syscall, so it is
+        // delivered even if we exit right after), but reap the child off the
+        // main thread so toggling/quitting never blocks the UI run loop.
+        p.terminate()
+        DispatchQueue.global(qos: .utility).async {
+            p.waitUntilExit()
+        }
+    }
+
+    // MARK: - Orphan reaping (crash / force-quit safety net)
+
+    private static func storePID(_ pid: pid_t) {
+        UserDefaults.standard.set(Int(pid), forKey: pidDefaultsKey)
+    }
+
+    private static func clearStoredPID() {
+        UserDefaults.standard.removeObject(forKey: pidDefaultsKey)
+    }
+
+    /// If a previous run was killed (crash, SIGKILL, force-quit) before it could
+    /// stop caffeinate, that child keeps the Mac awake with no UI to stop it.
+    /// On launch, terminate such an orphan — but only after confirming the
+    /// stored PID still maps to /usr/bin/caffeinate, so a recycled PID is safe.
+    static func reapOrphanIfNeeded() {
+        let stored = UserDefaults.standard.integer(forKey: pidDefaultsKey)
+        guard stored > 0 else { return }
+        clearStoredPID()
+        let pid = pid_t(stored)
+        if executablePath(of: pid) == "/usr/bin/caffeinate" {
+            kill(pid, SIGTERM)
+        }
+    }
+
+    /// Absolute executable path of a live PID, or nil if the PID is dead or
+    /// inaccessible. (proc_pidpath fails for non-existent processes.)
+    private static func executablePath(of pid: pid_t) -> String? {
+        var buf = [CChar](repeating: 0, count: 4096)
+        let n = proc_pidpath(pid, &buf, UInt32(buf.count))
+        return n > 0 ? String(cString: buf) : nil
     }
 }

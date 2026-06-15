@@ -69,8 +69,16 @@ final class UpdateChecker {
                 return
             }
 
-            let page = (json["html_url"] as? String).flatMap(URL.init(string:)) ?? self.releasesPageURL
-            if Self.isNewer(tag, than: current) {
+            // Only ever hand an https github.com URL to NSWorkspace.open; fall
+            // back to the hardcoded releases page for anything unexpected.
+            let page = (json["html_url"] as? String)
+                .flatMap(URL.init(string:))
+                .flatMap { Self.isTrustedReleaseURL($0) ? $0 : nil }
+                ?? self.releasesPageURL
+
+            // Require a real numeric version so a date/build-style tag
+            // (e.g. "2024-06-01") can't be misread as a huge newer version.
+            if Self.isValidVersion(Self.clean(tag)), Self.isNewer(tag, than: current) {
                 self.finish(completion, .updateAvailable(latest: Self.clean(tag), url: page))
             } else {
                 self.finish(completion, .upToDate(current: current))
@@ -94,6 +102,18 @@ final class UpdateChecker {
     /// True if `tag` represents a version strictly newer than `current`.
     static func isNewer(_ tag: String, than current: String) -> Bool {
         compare(clean(tag), clean(current)) > 0
+    }
+
+    /// A cleaned version must be purely numeric, dot-separated (e.g. "1", "1.2",
+    /// "1.2.0"); anything else (dates, "latest", build hashes) is not a version.
+    static func isValidVersion(_ cleaned: String) -> Bool {
+        !cleaned.isEmpty && cleaned.range(
+            of: "^[0-9]+(\\.[0-9]+)*$", options: .regularExpression) != nil
+    }
+
+    /// Only https://github.com URLs are trusted for opening from a release.
+    static func isTrustedReleaseURL(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host == "github.com"
     }
 
     /// Numeric, component-wise comparison: -1 / 0 / 1. Non-numeric junk in a

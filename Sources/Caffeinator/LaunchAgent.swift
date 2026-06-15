@@ -57,8 +57,10 @@ enum LaunchAgent {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
-        p.standardOutput = Pipe()
-        p.standardError = Pipe()
+        // Discard output via the null device. Undrained Pipes would risk a
+        // write-blocked child if launchctl ever exceeded the pipe buffer.
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
         do {
             try p.run()
             p.waitUntilExit()

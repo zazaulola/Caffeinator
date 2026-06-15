@@ -54,9 +54,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             kTimer:       0,
         ])
 
+        // Clean up a caffeinate child orphaned by a prior crash / force-quit.
+        CaffeinateController.reapOrphanIfNeeded()
+
         buildStatusItem()
         controller.onStateChange = { [weak self] in
             DispatchQueue.main.async { self?.refresh() }
+        }
+        controller.onError = { [weak self] error in
+            guard let self else { return }
+            self.runAlertInForeground { alert in
+                alert.alertStyle = .warning
+                alert.messageText = "Couldn't keep your Mac awake"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "OK")
+            }
         }
 
         power.onChange = { [weak self] snap in
@@ -223,6 +235,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         picker?.onPick = { [weak self] proc in
             guard let self, let proc else { return }
+            // The chosen task may have exited between listing and picking, in
+            // which case caffeinate -w would no-op instantly with a confusing
+            // flicker. Detect the already-dead case and tell the user.
+            if kill(proc.pid, 0) != 0 && errno == ESRCH {
+                self.runAlertInForeground { alert in
+                    alert.messageText = "That app or task has already finished"
+                    alert.informativeText = "\(proc.name) is no longer running, so there's nothing to wait for."
+                    alert.addButton(withTitle: "OK")
+                }
+                return
+            }
             self.watchedPID = proc.pid
             self.watchedName = proc.name
             self.startWithCurrentSettings()
@@ -256,6 +279,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Presents a modal alert after bringing the (agent) app to the front, so it
+    /// can't appear behind whatever app is currently active. Returns the response.
+    @discardableResult
+    private func runAlertInForeground(_ configure: (NSAlert) -> Void) -> NSApplication.ModalResponse {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        configure(alert)
+        return alert.runModal()
+    }
+
     @objc private func toggleLaunchAtLogin() {
         let shouldInstall = !LaunchAgent.isInstalled()
         do {
@@ -266,11 +299,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             launchAtLoginItem.state = LaunchAgent.isInstalled() ? .on : .off
         } catch {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Couldn't change the login setting"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
+            runAlertInForeground { alert in
+                alert.alertStyle = .warning
+                alert.messageText = "Couldn't change the login setting"
+                alert.informativeText = error.localizedDescription
+            }
         }
     }
 
@@ -282,29 +315,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.checkUpdatesItem.isEnabled = true
             self.checkUpdatesItem.title = "Check for Updates…"
 
-            let alert = NSAlert()
             switch result {
             case let .updateAvailable(latest, url):
                 self.showUpdateAvailable(version: latest, url: url)
-                alert.messageText = "A new version is available"
-                alert.informativeText = "Caffeinator \(latest) is available. "
-                    + "You're running \(self.updater.currentVersion)."
-                alert.addButton(withTitle: "Download")
-                alert.addButton(withTitle: "Later")
-                if alert.runModal() == .alertFirstButtonReturn {
+                let response = self.runAlertInForeground { alert in
+                    alert.messageText = "A new version is available"
+                    alert.informativeText = "Caffeinator \(latest) is available. "
+                        + "You're running \(self.updater.currentVersion)."
+                    alert.addButton(withTitle: "Download")
+                    alert.addButton(withTitle: "Later")
+                }
+                if response == .alertFirstButtonReturn {
                     NSWorkspace.shared.open(url)
                 }
             case let .upToDate(current):
-                alert.messageText = "You're up to date"
-                alert.informativeText = "Caffeinator \(current) is the latest version."
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
+                self.runAlertInForeground { alert in
+                    alert.messageText = "You're up to date"
+                    alert.informativeText = "Caffeinator \(current) is the latest version."
+                    alert.addButton(withTitle: "OK")
+                }
             case let .failed(message):
-                alert.alertStyle = .warning
-                alert.messageText = "Couldn't check for updates"
-                alert.informativeText = message
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
+                self.runAlertInForeground { alert in
+                    alert.alertStyle = .warning
+                    alert.messageText = "Couldn't check for updates"
+                    alert.informativeText = message
+                    alert.addButton(withTitle: "OK")
+                }
             }
         }
     }
@@ -325,16 +361,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
-        let alert = NSAlert()
-        alert.messageText = "Caffeinator"
-        alert.informativeText = """
-            Caffeinator stops your Mac from falling asleep when you need it to stay awake — long downloads, video calls, presentations, file transfers, renders, anything that takes a while.
+        runAlertInForeground { alert in
+            alert.messageText = "Caffeinator"
+            alert.informativeText = """
+                Caffeinator stops your Mac from falling asleep when you need it to stay awake — long downloads, video calls, presentations, file transfers, renders, anything that takes a while.
 
-            Pick what to keep awake (the screen, the system, storage), set how long, or have it wait until a specific app or task finishes. When you turn it off, your Mac goes back to sleeping normally.
+                Pick what to keep awake (the screen, the system, storage), set how long, or have it wait until a specific app or task finishes. When you turn it off, your Mac goes back to sleeping normally.
 
-            To save power, Caffeinator turns itself off if your battery drops below 10 % while unplugged.
-            """
-        alert.runModal()
+                To save power, Caffeinator turns itself off if your battery drops below 10 % while unplugged.
+                """
+        }
     }
 
     @objc private func quit() {
@@ -348,7 +384,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let pid = watchedPID {
             controller.start(flags: flags, timeoutSeconds: nil, waitPID: pid)
         } else {
-            let t = defaults.integer(forKey: kTimer)
+            // On an in-place restart (e.g. toggling a mode mid-session), keep the
+            // time already counted down instead of resetting to the full preset.
+            let preset = defaults.integer(forKey: kTimer)
+            let t = controller.isActive ? (controller.remainingSeconds ?? preset) : preset
             controller.start(flags: flags, timeoutSeconds: t > 0 ? t : nil)
         }
     }

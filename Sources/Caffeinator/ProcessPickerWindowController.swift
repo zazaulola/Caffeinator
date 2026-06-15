@@ -54,7 +54,6 @@ final class ProcessPickerWindowController: NSWindowController,
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         refreshProcessList()
-        applyFilter()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(searchField)
@@ -141,19 +140,31 @@ final class ProcessPickerWindowController: NSWindowController,
 
     // MARK: - Data
 
+    /// Rebuilds the process list and refreshes the table. GUI apps come from
+    /// NSWorkspace (main thread, cheap); the optional `ps` enumeration of every
+    /// process runs off the main thread so it never freezes the UI.
     private func refreshProcessList() {
-        var byPID: [pid_t: RunningProcess] = [:]
-
+        let apps = guiApps()
         if includeBackground {
-            for entry in listAllProcesses() {
-                byPID[entry.pid] = entry
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let background = self?.listAllProcesses() ?? []
+                DispatchQueue.main.async {
+                    guard let self, !self.didFinish else { return }
+                    self.allProcesses = self.merged(apps: apps, background: background)
+                    self.applyFilter()
+                }
             }
+        } else {
+            allProcesses = merged(apps: apps, background: [])
+            applyFilter()
         }
+    }
 
-        for app in NSWorkspace.shared.runningApplications {
+    private func guiApps() -> [RunningProcess] {
+        NSWorkspace.shared.runningApplications.compactMap { app in
             let pid = app.processIdentifier
-            guard pid > 0 else { continue }
-            byPID[pid] = RunningProcess(
+            guard pid > 0 else { return nil }
+            return RunningProcess(
                 pid: pid,
                 name: app.localizedName ?? app.bundleIdentifier ?? "PID \(pid)",
                 path: app.bundleURL?.path ?? app.executableURL?.path,
@@ -161,11 +172,16 @@ final class ProcessPickerWindowController: NSWindowController,
                 isApp: true
             )
         }
+    }
 
-        let selfPID = Foundation.ProcessInfo.processInfo.processIdentifier
-        byPID.removeValue(forKey: selfPID)
-
-        allProcesses = byPID.values.sorted { lhs, rhs in
+    /// Merges GUI apps over background processes (apps win on PID collision),
+    /// drops our own PID, and sorts apps-first then by name.
+    private func merged(apps: [RunningProcess], background: [RunningProcess]) -> [RunningProcess] {
+        var byPID: [pid_t: RunningProcess] = [:]
+        for entry in background { byPID[entry.pid] = entry }
+        for app in apps { byPID[app.pid] = app }
+        byPID.removeValue(forKey: Foundation.ProcessInfo.processInfo.processIdentifier)
+        return byPID.values.sorted { lhs, rhs in
             if lhs.isApp != rhs.isApp { return lhs.isApp }
             let cmp = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
             if cmp != .orderedSame { return cmp == .orderedAscending }
@@ -179,14 +195,17 @@ final class ProcessPickerWindowController: NSWindowController,
         p.arguments = ["-axo", "pid=,comm="]
         let outPipe = Pipe()
         p.standardOutput = outPipe
-        p.standardError = Pipe()
+        p.standardError = FileHandle.nullDevice
         do {
             try p.run()
-            p.waitUntilExit()
         } catch {
             return []
         }
+        // Drain stdout BEFORE waiting: reading to EOF unblocks ps as it writes
+        // and returns once ps closes the pipe (exits), so it can't deadlock on a
+        // full pipe buffer the way wait-then-read would.
         let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
         guard let str = String(data: data, encoding: .utf8) else { return [] }
 
         var result: [RunningProcess] = []
@@ -241,7 +260,6 @@ final class ProcessPickerWindowController: NSWindowController,
     @objc private func toggleBackground() {
         includeBackground = backgroundCheckbox.state == .on
         refreshProcessList()
-        applyFilter()
     }
 
     @objc private func handleWatch() {

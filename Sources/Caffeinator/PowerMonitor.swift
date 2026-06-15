@@ -35,9 +35,20 @@ final class PowerMonitor {
         }
     }
 
+    // The run-loop source embeds a raw (passUnretained) pointer to self, so it
+    // must be torn down before this instance is freed — otherwise a later power
+    // notification would dereference freed memory. stop() is idempotent.
+    deinit {
+        stop()
+    }
+
     func snapshot() -> Snapshot {
-        let blob = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        let list = IOPSCopyPowerSourcesList(blob).takeRetainedValue() as [CFTypeRef]
+        // IOPSCopy* are documented to return NULL on error / low memory; fall
+        // back to the no-battery snapshot rather than trapping on a force-unwrap.
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            return Snapshot(hasBattery: false, isOnBattery: false, percentage: 100)
+        }
 
         for src in list {
             guard let raw = IOPSGetPowerSourceDescription(blob, src)?.takeUnretainedValue() else { continue }

@@ -67,4 +67,33 @@ final class UpdateCheckerVersionTests: XCTestCase {
     func testCurrentVersionIsNonEmpty() {
         XCTAssertFalse(UpdateChecker().currentVersion.isEmpty)
     }
+
+    // MARK: isValidVersion — reject non-version tags (dates, "latest", hashes)
+
+    func testValidVersionsAccepted() {
+        XCTAssertTrue(UpdateChecker.isValidVersion("1"))
+        XCTAssertTrue(UpdateChecker.isValidVersion("1.2"))
+        XCTAssertTrue(UpdateChecker.isValidVersion("1.2.3"))
+    }
+
+    func testNonVersionTagsRejected() {
+        XCTAssertFalse(UpdateChecker.isValidVersion(""))
+        XCTAssertFalse(UpdateChecker.isValidVersion("latest"))
+        XCTAssertFalse(UpdateChecker.isValidVersion("2024-06-01"))   // date-style
+        XCTAssertFalse(UpdateChecker.isValidVersion("1.2-beta"))     // suffix
+        XCTAssertFalse(UpdateChecker.isValidVersion("v1.2"))         // expects cleaned input
+    }
+
+    // MARK: isTrustedReleaseURL — only https github.com may be opened
+
+    func testTrustedReleaseURLs() {
+        XCTAssertTrue(UpdateChecker.isTrustedReleaseURL(
+            URL(string: "https://github.com/zazaulola/Caffeinator/releases/tag/v1.2")!))
+    }
+
+    func testUntrustedReleaseURLsRejected() {
+        XCTAssertFalse(UpdateChecker.isTrustedReleaseURL(URL(string: "http://github.com/x")!))   // not https
+        XCTAssertFalse(UpdateChecker.isTrustedReleaseURL(URL(string: "https://evil.example/x")!)) // wrong host
+        XCTAssertFalse(UpdateChecker.isTrustedReleaseURL(URL(string: "file:///etc/passwd")!))     // file scheme
+    }
 }
