@@ -23,6 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastPower: PowerMonitor.Snapshot?
     private static let lowBatteryThreshold = 10  // percent
 
+    private let updater = UpdateChecker()
+    private var updateItem: NSMenuItem!
+    private var updateSeparator: NSMenuItem!
+    private var checkUpdatesItem: NSMenuItem!
+    private var updateURL: URL?
+
     private let kModeDisplay = "modeDisplay"
     private let kModeIdle    = "modeIdle"
     private let kModeDisk    = "modeDisk"
@@ -60,6 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastPower = power.snapshot()
 
         refresh()
+
+        // Silent, rate-limited update check (at most once a day). Only surfaces
+        // the menu item when something newer is actually available.
+        updater.checkIfDue { [weak self] result in
+            if case let .updateAvailable(latest, url) = result {
+                self?.showUpdateAvailable(version: latest, url: url)
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -92,6 +106,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
+
+        updateItem = NSMenuItem(title: "Update available",
+                                action: #selector(openUpdate),
+                                keyEquivalent: "")
+        updateItem.target = self
+        updateItem.isHidden = true
+        menu.addItem(updateItem)
+
+        updateSeparator = .separator()
+        updateSeparator.isHidden = true
+        menu.addItem(updateSeparator)
 
         stateItem = NSMenuItem(title: "Your Mac sleeps normally", action: nil, keyEquivalent: "")
         stateItem.isEnabled = false
@@ -147,6 +172,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(launchAtLoginItem)
 
         menu.addItem(.separator())
+
+        checkUpdatesItem = NSMenuItem(title: "Check for Updates…",
+                                      action: #selector(checkForUpdates),
+                                      keyEquivalent: "")
+        checkUpdatesItem.target = self
+        menu.addItem(checkUpdatesItem)
 
         let about = NSMenuItem(title: "About Caffeinator", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
@@ -240,6 +271,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.messageText = "Couldn't change the login setting"
             alert.informativeText = error.localizedDescription
             alert.runModal()
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        checkUpdatesItem.isEnabled = false
+        checkUpdatesItem.title = "Checking for updates…"
+        updater.check { [weak self] result in
+            guard let self else { return }
+            self.checkUpdatesItem.isEnabled = true
+            self.checkUpdatesItem.title = "Check for Updates…"
+
+            let alert = NSAlert()
+            switch result {
+            case let .updateAvailable(latest, url):
+                self.showUpdateAvailable(version: latest, url: url)
+                alert.messageText = "A new version is available"
+                alert.informativeText = "Caffeinator \(latest) is available. "
+                    + "You're running \(self.updater.currentVersion)."
+                alert.addButton(withTitle: "Download")
+                alert.addButton(withTitle: "Later")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(url)
+                }
+            case let .upToDate(current):
+                alert.messageText = "You're up to date"
+                alert.informativeText = "Caffeinator \(current) is the latest version."
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            case let .failed(message):
+                alert.alertStyle = .warning
+                alert.messageText = "Couldn't check for updates"
+                alert.informativeText = message
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+        }
+    }
+
+    private func showUpdateAvailable(version: String, url: URL) {
+        updateURL = url
+        updateItem.title = "✨ Update available: \(version)"
+        updateItem.isHidden = false
+        updateSeparator.isHidden = false
+    }
+
+    @objc private func openUpdate() {
+        if let url = updateURL {
+            NSWorkspace.shared.open(url)
+        } else {
+            NSWorkspace.shared.open(updater.releasesPageURL)
         }
     }
 

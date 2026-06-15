@@ -33,8 +33,12 @@ Click the cup in the menu bar to open the menu:
 | **Turn off after…** | A submenu: auto-stop after 15 min, 30 min, 1/2/4/8 hours, or run until you turn it off. |
 | **Until an app or task finishes…** | Stay awake until a chosen app or task quits — then stop automatically. (While one is already being watched this reads **Wait for a different app or task…**.) |
 | **Open when I log in** | Start Caffeinator automatically every time you sign in. |
+| **Check for Updates…** | Ask GitHub whether a newer version is available. |
 | **About Caffeinator** | A plain-language description of what the app does. |
 | **Quit Caffeinator** *(⌘Q)* | Quit the app (your Mac immediately goes back to sleeping normally). |
+
+When a newer version exists, a **✨ Update available: x.y** item appears at the
+very top of the menu — click it to open the download page.
 
 The first line of the menu always tells you the current state, for example:
 *"Your Mac sleeps normally"*, *"Keeping your Mac awake"*, *"Awake · 1 h 23 min
@@ -55,6 +59,15 @@ If you're on battery power and the charge drops to **10 % or below**,
 Caffeinator automatically turns itself off and greys out the controls so your
 Mac can sleep and save power. Plug in (or charge above 10 %) and it's available
 again. This guard never triggers on a Mac without a battery or while plugged in.
+
+### Staying up to date
+
+Caffeinator checks GitHub for a newer release quietly in the background (at most
+once a day) and, if one exists, shows a **✨ Update available** item at the top
+of the menu. You can also check any time with **Check for Updates…**. Nothing is
+ever installed automatically — clicking through just opens the release page so
+you decide whether to download. No account, telemetry, or tracking is involved;
+it's a single anonymous request to the public GitHub API.
 
 ---
 
@@ -101,6 +114,18 @@ stable identity for permissions and login items.
 The app runs as a menu-bar–only agent (`LSUIElement` / `.accessory`
 activation policy) — no Dock icon, no main window.
 
+### Cutting a release
+
+The in-app update check compares against GitHub Releases, so to ship an update:
+
+1. Bump `CFBundleShortVersionString` in `Resources/Info.plist`.
+2. Tag and publish a GitHub release, e.g.
+   `gh release create v1.1 --generate-notes` (optionally attach a zipped
+   `Caffeinator.app` — CI builds one as an artifact on every push).
+
+Existing installs will then surface a **✨ Update available** item. Until the
+first release is published, the check simply reports "up to date".
+
 ---
 
 ## How it works
@@ -140,6 +165,12 @@ system's own `/usr/bin/caffeinate` tool and reflects its state in the menu bar.
   `~/Library/LaunchAgents/com.caffeinator.menubar.plist` (with `RunAtLoad`)
   and best-effort registers it with `launchd` for the current session.
 
+- **`UpdateChecker.swift`** — queries the GitHub Releases API
+  (`/repos/zazaulola/Caffeinator/releases/latest`) and compares the latest tag
+  to the bundle's `CFBundleShortVersionString` with a numeric, component-wise
+  version compare. A missing release (HTTP 404) is treated as "up to date". The
+  on-launch check is rate-limited to once per 24 h via `UserDefaults`.
+
 ### What "keep awake" really does
 
 Each menu toggle maps to a `caffeinate` flag. If you turn everything off,
@@ -172,6 +203,7 @@ Sources/Caffeinator/
   PowerMonitor.swift               # IOKit battery / power monitoring
   ProcessPickerWindowController.swift  # "wait for app/task" picker UI
   LaunchAgent.swift                # login-item plist install/uninstall
+  UpdateChecker.swift              # GitHub Releases update check
 ```
 
 ---
