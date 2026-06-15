@@ -17,7 +17,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Show toolchain
         run: |
@@ -38,7 +38,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Upload app bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Caffeinator.app
           path: .build/Caffeinator.app
