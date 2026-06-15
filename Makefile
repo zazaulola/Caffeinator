@@ -1,6 +1,8 @@
 APP_NAME    := Caffeinator
+ARCHS       := --arch arm64 --arch x86_64
 BUILD_DIR   := .build
-RELEASE_DIR := $(BUILD_DIR)/release
+# Universal (--arch ...) builds land under apple/Products, not release/.
+RELEASE_DIR := $(BUILD_DIR)/apple/Products/Release
 APP_BUNDLE  := $(BUILD_DIR)/$(APP_NAME).app
 INSTALL_DIR := /Applications
 
@@ -9,7 +11,7 @@ INSTALL_DIR := /Applications
 all: bundle
 
 build:
-	swift build -c release
+	swift build -c release $(ARCHS)
 
 bundle: build
 	@rm -rf "$(APP_BUNDLE)"
@@ -18,7 +20,7 @@ bundle: build
 	@cp "$(RELEASE_DIR)/$(APP_NAME)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Resources/Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
 	@codesign --force --sign - "$(APP_BUNDLE)" >/dev/null 2>&1 || true
-	@echo "✓ Bundled at $(APP_BUNDLE)"
+	@echo "✓ Bundled at $(APP_BUNDLE) ($$(lipo -archs "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"))"
 
 run: bundle
 	open "$(APP_BUNDLE)"

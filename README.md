@@ -124,9 +124,11 @@ make run          # builds, bundles to .build/Caffeinator.app, and launches it
 | `make uninstall` | Remove the app, its LaunchAgent, and unload it from `launchd`. |
 | `make clean` | Remove all build artifacts. |
 
-The build assembles a real `.app` bundle by hand (binary + `Info.plist`) and
-ad-hoc codesigns it (`codesign --force --sign -`) so macOS treats it as a
-stable identity for permissions and login items.
+The build is a **universal binary** (`--arch arm64 --arch x86_64`), so it runs
+on both Apple Silicon and Intel Macs. The Makefile assembles a real `.app`
+bundle by hand (binary + `Info.plist`) and ad-hoc codesigns it
+(`codesign --force --sign -`) so macOS treats it as a stable identity for
+permissions and login items.
 
 The app runs as a menu-bar–only agent (`LSUIElement` / `.accessory`
 activation policy) — no Dock icon, no main window.
@@ -249,6 +251,6 @@ Sources/Caffeinator/
 
 ## Requirements
 
-- macOS 11 (Big Sur) or newer
+- macOS 11 (Big Sur) or newer, Apple Silicon or Intel (universal binary)
 - Xcode command-line tools with Swift 5.9+
 - The system `caffeinate` tool (ships with macOS at `/usr/bin/caffeinate`)

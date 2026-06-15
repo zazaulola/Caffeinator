@@ -27,18 +27,19 @@ jobs:
             exit 1
           fi
 
-      - name: Build (release)
-        run: swift build -c release
-
-      - name: Assemble .app bundle
+      - name: Build & bundle (universal)
         run: make bundle
 
       - name: Verify bundle
         run: |
           APP=.build/Caffeinator.app
-          test -x "$APP/Contents/MacOS/Caffeinator" || { echo "executable missing"; exit 1; }
+          BIN="$APP/Contents/MacOS/Caffeinator"
+          test -x "$BIN" || { echo "executable missing"; exit 1; }
           plutil -lint "$APP/Contents/Info.plist"
           codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "archs: $(lipo -archs "$BIN")"
+          lipo -archs "$BIN" | grep -q arm64  || { echo "missing arm64";  exit 1; }
+          lipo -archs "$BIN" | grep -q x86_64 || { echo "missing x86_64"; exit 1; }
 
       - name: Zip app bundle
         run: |
