@@ -123,6 +123,7 @@ make run          # builds, bundles to .build/Caffeinator.app, and launches it
 | `make install` | Bundle and copy to `/Applications`. |
 | `make uninstall` | Remove the app, its LaunchAgent, and unload it from `launchd`. |
 | `make clean` | Remove all build artifacts. |
+| `swift test` | Run the unit tests (version-comparison logic). |
 
 The build is a **universal binary** (`--arch arm64 --arch x86_64`), so it runs
 on both Apple Silicon and Intel Macs. The Makefile assembles a real `.app`
@@ -228,6 +229,8 @@ Sources/Caffeinator/
   ProcessPickerWindowController.swift  # "wait for app/task" picker UI
   LaunchAgent.swift                # login-item plist install/uninstall
   UpdateChecker.swift              # GitHub Releases update check
+Tests/CaffeinatorTests/
+  UpdateCheckerTests.swift         # version-comparison unit tests
 ```
 
 ---

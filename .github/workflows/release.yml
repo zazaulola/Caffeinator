@@ -27,6 +27,9 @@ jobs:
             exit 1
           fi
 
+      - name: Run tests
+        run: swift test
+
       - name: Build & bundle (universal)
         run: make bundle
 

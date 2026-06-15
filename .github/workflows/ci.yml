@@ -24,6 +24,9 @@ jobs:
           swift --version
           xcodebuild -version
 
+      - name: Run tests
+        run: swift test
+
       - name: Build & bundle (universal)
         run: make bundle
 
