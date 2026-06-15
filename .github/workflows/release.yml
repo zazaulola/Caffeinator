@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify tag matches Info.plist version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PLIST_VER=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+          echo "tag=$TAG  Info.plist=$PLIST_VER"
+          if [ "$TAG" != "$PLIST_VER" ]; then
+            echo "::error::Tag v$TAG does not match CFBundleShortVersionString ($PLIST_VER). Bump Resources/Info.plist before tagging."
+            exit 1
+          fi
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Assemble .app bundle
+        run: make bundle
+
+      - name: Verify bundle
+        run: |
+          APP=.build/Caffeinator.app
+          test -x "$APP/Contents/MacOS/Caffeinator" || { echo "executable missing"; exit 1; }
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Zip app bundle
+        run: |
+          ditto -c -k --keepParent .build/Caffeinator.app "Caffeinator-${GITHUB_REF_NAME}.zip"
+          ls -lh "Caffeinator-${GITHUB_REF_NAME}.zip"
+
+      - name: Publish GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "Caffeinator-${GITHUB_REF_NAME}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

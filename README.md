@@ -73,7 +73,14 @@ it's a single anonymous request to the public GitHub API.
 
 ## Install
 
-### Option A — build it yourself (recommended)
+### Option A — download a build
+
+Grab the latest `Caffeinator-vX.Y.zip` from the
+[Releases page](https://github.com/zazaulola/Caffeinator/releases), unzip, and
+move `Caffeinator.app` to **Applications**. The build is ad-hoc signed, not
+notarized, so the first launch needs right-click → **Open** to clear Gatekeeper.
+
+### Option B — build it yourself (recommended)
 
 Requires the Xcode command-line tools (Swift 5.9+) on macOS 11 or newer.
 
@@ -88,7 +95,7 @@ The first time you launch, macOS Gatekeeper may ask you to confirm — open it
 once from **Applications** (or right-click → Open) to get past the prompt. The
 app is ad-hoc signed, not notarized.
 
-### Option B — just build and run locally
+### Option C — just build and run locally
 
 ```sh
 make run          # builds, bundles to .build/Caffeinator.app, and launches it
@@ -116,15 +123,20 @@ activation policy) — no Dock icon, no main window.
 
 ### Cutting a release
 
-The in-app update check compares against GitHub Releases, so to ship an update:
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml).
+To ship an update:
 
 1. Bump `CFBundleShortVersionString` in `Resources/Info.plist`.
-2. Tag and publish a GitHub release, e.g.
-   `gh release create v1.1 --generate-notes` (optionally attach a zipped
-   `Caffeinator.app` — CI builds one as an artifact on every push).
+2. Tag and push, matching the version:
 
-Existing installs will then surface a **✨ Update available** item. Until the
-first release is published, the check simply reports "up to date".
+   ```sh
+   git tag v1.1 && git push origin v1.1
+   ```
+
+The workflow then checks the tag matches the bundle version, builds and verifies
+the `.app`, zips it, and publishes a GitHub release with the zip attached.
+Existing installs surface a **✨ Update available** item on their next check.
+Until the first release is published, the check simply reports "up to date".
 
 ---
 
