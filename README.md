@@ -1,5 +1,7 @@
 # Caffeinator
 
+[![CI](https://github.com/zazaulola/Caffeinator/actions/workflows/ci.yml/badge.svg)](https://github.com/zazaulola/Caffeinator/actions/workflows/ci.yml)
+
 A tiny macOS menu bar app that stops your Mac from going to sleep when you
 need it to stay awake — long downloads, video calls, presentations, file
 transfers, renders, backups, anything that takes a while.
