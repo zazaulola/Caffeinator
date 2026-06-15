@@ -123,6 +123,7 @@ make run          # builds, bundles to .build/Caffeinator.app, and launches it
 | `make install` | Bundle and copy to `/Applications`. |
 | `make uninstall` | Remove the app, its LaunchAgent, and unload it from `launchd`. |
 | `make clean` | Remove all build artifacts. |
+| `make icon` | Regenerate `Resources/AppIcon.icns` from the generator script. |
 | `swift test` | Run the unit tests (version-comparison logic). |
 
 The build is a **universal binary** (`--arch arm64 --arch x86_64`), so it runs
@@ -219,8 +220,10 @@ clears the other.
 
 ```
 Package.swift                      # SwiftPM manifest (executable target)
-Makefile                           # build / bundle / install / uninstall
+Makefile                           # build / bundle / install / uninstall / icon
 Resources/Info.plist               # LSUIElement=true, bundle metadata
+Resources/AppIcon.icns             # app icon (coffee cup)
+scripts/generate-icon.swift        # CoreGraphics icon generator (make icon)
 Sources/Caffeinator/
   main.swift                       # app bootstrap + single-instance guard
   AppDelegate.swift                # status item, menu, state, settings

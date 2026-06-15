@@ -6,7 +6,7 @@ RELEASE_DIR := $(BUILD_DIR)/apple/Products/Release
 APP_BUNDLE  := $(BUILD_DIR)/$(APP_NAME).app
 INSTALL_DIR := /Applications
 
-.PHONY: all build bundle run install uninstall clean
+.PHONY: all build bundle run install uninstall clean icon
 
 all: bundle
 
@@ -19,8 +19,18 @@ bundle: build
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp "$(RELEASE_DIR)/$(APP_NAME)" "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Resources/Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
+	@cp Resources/AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
 	@codesign --force --sign - "$(APP_BUNDLE)" >/dev/null 2>&1 || true
 	@echo "✓ Bundled at $(APP_BUNDLE) ($$(lipo -archs "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)"))"
+
+# Regenerate Resources/AppIcon.icns from scripts/generate-icon.swift
+icon:
+	@rm -rf "$(BUILD_DIR)/iconset" "$(BUILD_DIR)/AppIcon.iconset"
+	@swift scripts/generate-icon.swift "$(BUILD_DIR)/iconset"
+	@mkdir -p "$(BUILD_DIR)/AppIcon.iconset"
+	@cp "$(BUILD_DIR)/iconset"/icon_*.png "$(BUILD_DIR)/AppIcon.iconset/"
+	@iconutil -c icns "$(BUILD_DIR)/AppIcon.iconset" -o Resources/AppIcon.icns
+	@echo "✓ Wrote Resources/AppIcon.icns"
 
 run: bundle
 	open "$(APP_BUNDLE)"
