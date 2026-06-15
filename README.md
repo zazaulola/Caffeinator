@@ -73,14 +73,24 @@ it's a single anonymous request to the public GitHub API.
 
 ## Install
 
-### Option A — download a build
+### Option A — Homebrew
+
+```sh
+brew tap zazaulola/tap
+brew trust zazaulola/tap      # Homebrew 6+ requires trusting third-party tap casks
+brew install --cask caffeinator
+```
+
+### Option B — download a build
 
 Grab the latest `Caffeinator-vX.Y.zip` from the
 [Releases page](https://github.com/zazaulola/Caffeinator/releases), unzip, and
-move `Caffeinator.app` to **Applications**. The build is ad-hoc signed, not
-notarized, so the first launch needs right-click → **Open** to clear Gatekeeper.
+move `Caffeinator.app` to **Applications**.
 
-### Option B — build it yourself (recommended)
+> Either way, the build is ad-hoc signed and not notarized, so the first launch
+> needs right-click → **Open** to clear Gatekeeper.
+
+### Option C — build it yourself (recommended)
 
 Requires the Xcode command-line tools (Swift 5.9+) on macOS 11 or newer.
 
@@ -95,7 +105,7 @@ The first time you launch, macOS Gatekeeper may ask you to confirm — open it
 once from **Applications** (or right-click → Open) to get past the prompt. The
 app is ad-hoc signed, not notarized.
 
-### Option C — just build and run locally
+### Option D — just build and run locally
 
 ```sh
 make run          # builds, bundles to .build/Caffeinator.app, and launches it
