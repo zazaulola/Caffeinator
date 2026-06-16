@@ -260,3 +260,9 @@ Tests/CaffeinatorTests/
 - macOS 11 (Big Sur) or newer, Apple Silicon or Intel (universal binary)
 - Xcode command-line tools with Swift 5.9+
 - The system `caffeinate` tool (ships with macOS at `/usr/bin/caffeinate`)
+
+---
+
+## License
+
+[MIT](LICENSE) © zazaulola
